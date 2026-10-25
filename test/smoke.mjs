@@ -13,7 +13,7 @@ const check = (name, ok, detail = "") => { console.log(`${ok ? "PASS" : "FAIL"} 
 const call = async (name, args = {}) => (await client.callTool({ name, arguments: args })).content[0].text;
 
 const tools = (await client.listTools()).tools.map((t) => t.name);
-for (const t of ["list_skills", "get_skill", "search_security", "skills_for_task", "secure_coding_checklist", "scan_code", "threat_model", "check_known_exploited", "lookup_cve", "check_package_vulns", "recent_ai_threat_sources"])
+for (const t of ["list_skills", "get_skill", "search_security", "skills_for_task", "secure_coding_checklist", "scan_code", "scan_path", "threat_model", "check_known_exploited", "lookup_cve", "check_package_vulns", "recent_ai_threat_sources"])
   check(`tool registered: ${t}`, tools.includes(t));
 
 const list = await call("list_skills");
@@ -41,6 +41,48 @@ const out = await call("scan_code", { code: bad.join("\n") });
 check("scanner flags all 10 bad samples", (out.match(/\bline \d+/g) || []).length >= 10 && /^1\d potential|^\d+ potential/.test(out), out.split("\n")[0]);
 const good = ['cur.execute("SELECT * FROM t WHERE id=%s", (uid,))', "uses: actions/checkout@" + "a".repeat(40), "const t = crypto.randomBytes(32)"].join("\n");
 check("scanner quiet on safe code", /no pattern hits/.test(await call("scan_code", { code: good })), (await call("scan_code", { code: good })).slice(0, 80));
+
+// regression: false positives found in the first real-repo trial must stay quiet / downgraded
+const quiet = [
+  'c.execute(f"UPDATE jobs SET {", ".join(sets)} WHERE id=?", params)',
+  "host.innerHTML = '<b>' + esc(name) + '</b>';",
+  "el.innerHTML = '<div class=\"empty\">Nothing here</div>';",
+  'token = "test-token-for-fixtures-only"',
+].join("\n");
+const qo = await call("scan_code", { code: quiet, filename: "app.py" });
+check("bound-param SQL is downgraded to low, not HIGH", !/\[HIGH\]/.test(qo) && /\[LOW\] line 1 sql-concat/.test(qo), qo.split("\n")[0]);
+check("escaped / literal innerHTML and placeholder secrets suppressed", !/xss-sink|hardcoded-secret/.test(qo));
+const real = [
+  "}).catch(function(e){ host.innerHTML='<div class=\"win-empty\">Couldn\\'t load</div>'; });",
+  "if(!ev.length){ el('b').innerHTML='<div class=\"empty\">Nothing yet.</div>'; return; }",
+  "readAloud(t).then(function () { b.disabled = false; b.innerHTML = idle; })",
+  "host.innerHTML=items.map(function(it){",
+].join("\n");
+const ro = await call("scan_code", { code: real, filename: "page.html" });
+check("desk-page idioms: literals suppressed, variable/multiline downgraded to low", !/\[(MEDIUM|HIGH)\]/.test(ro) && (ro.match(/\[LOW\]/g) || []).length === 2, ro.split("\n")[0]);
+check("real unescaped innerHTML still flagged", /xss-sink/.test(await call("scan_code", { code: "el.innerHTML = '<p>' + userInput + '</p>'" })));
+check("unparameterized SQL still HIGH", /\[HIGH\].*sql-concat/.test(await call("scan_code", { code: 'cur.execute("SELECT * FROM u WHERE n=\'" + name + "\'")' })));
+check("SHA-pinned action quiet, tag-pinned flagged",
+  /no pattern hits/.test(await call("scan_code", { code: "uses: actions/checkout@" + "b".repeat(40) + " # v4" })) &&
+  /unpinned-ci-ref/.test(await call("scan_code", { code: "uses: actions/checkout@v4" })));
+
+// scan_path: skips vendored dirs and .env, never echoes secrets, finds real issues
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+const tmp = mkdtempSync(join(tmpdir(), "sdm-"));
+mkdirSync(join(tmp, ".venv")); mkdirSync(join(tmp, "src")); mkdirSync(join(tmp, "tests"));
+const SECRET = "AKIA" + "QWERTYUIOPASDFGH";
+writeFileSync(join(tmp, "src", "a.py"), `key = "${SECRET}"\ncur.execute("SELECT 1 WHERE n='" + name + "'")\n`);
+writeFileSync(join(tmp, ".venv", "bad.py"), 'os.system("rm -rf " + x)\n');
+writeFileSync(join(tmp, ".env"), `API_KEY="${"sk" + "-live1234567890abcdefghij"}"\n`);
+writeFileSync(join(tmp, "tests", "test_a.py"), 'password = "hunter2hunter2hunter2"\n');
+const po = await call("scan_path", { path: tmp });
+check("scan_path finds issues in src", /a\.py:1 aws-key/.test(po) && /a\.py:2 sql-concat/.test(po), po.split("\n")[0]);
+check("scan_path skips .venv and .env", !/\.venv|\.env/.test(po.replace(tmp, "")));
+check("scan_path never echoes the secret", !po.includes(SECRET) && !po.includes("live1234567890"));
+check("test-file secret downgraded to low (not listed)", !/\[HIGH\].*test_a/.test(po) && /low hardcoded-secret/.test(po));
+check("scan_path rejects bad path", /not found/.test(await call("scan_path", { path: join(tmp, "nope") })));
+rmSync(tmp, { recursive: true, force: true });
 
 check("threat_model returns worksheet", /STRIDE/.test(await call("threat_model", { system_description: "login API" })));
 check("sources list has OWASP+CISA", /genai\.owasp\.org/.test(await call("recent_ai_threat_sources")));

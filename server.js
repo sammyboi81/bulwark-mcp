@@ -5,8 +5,8 @@
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { readFileSync, readdirSync, realpathSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { readFileSync, readdirSync, realpathSync, lstatSync, statSync } from "node:fs";
+import { dirname, join, extname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), "skills");
@@ -84,7 +84,7 @@ export const RULES = [
   ["hardcoded-secret", /(api[_-]?key|secret|passwd|password|token|private[_-]?key)\s*[:=]\s*['"][A-Za-z0-9_\-/+=]{12,}['"]/i, "high", "Possible hardcoded secret.", "Move to env/secret manager; rotate if committed."],
   ["aws-key", /\b(AKIA|ASIA)[A-Z0-9]{16}\b/, "critical", "AWS access key id pattern.", "Revoke and rotate immediately; use IAM roles."],
   ["private-key", /-----BEGIN (RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----/, "critical", "Private key material in source.", "Remove, rotate, load from a secret store."],
-  ["sql-concat", /(execute|query|raw)\s*\(\s*(f['"`][^'"`]*\b(select|insert|update|delete)\b|['"`][^'"`]*\b(select|insert|update|delete)\b[^'"`]*['"`]\s*(\+|%\s*[\w(])|`[^`]*\b(select|insert|update|delete)\b[^`]*\$\{)/i, "high", "SQL built by string concatenation/formatting.", "Use parameterized queries."],
+  ["sql-concat", /(execute|query|raw)\s*\(\s*(f(?<q1>['"`])(?:(?!\k<q1>).)*\b(select|insert|update|delete)\b(?:(?!\k<q1>).)*\{|(?<q2>['"`])(?:(?!\k<q2>).)*\b(select|insert|update|delete)\b(?:(?!\k<q2>).)*\k<q2>\s*(\+|%\s*[\w(])|`[^`]*\b(select|insert|update|delete)\b[^`]*\$\{)/i, "high", "SQL built by string concatenation/formatting.", "Use parameterized queries."],
   ["shell-injection", /(os\.system|subprocess\.\w+\(.*shell\s*=\s*True|child_process\.exec\(|\bexec\(\s*[`'"].*\$\{|Runtime\.getRuntime\(\)\.exec\(|\bpopen\()/i, "high", "Shell execution; injectable if any input reaches it.", "Pass an argument array without a shell; validate by allowlist."],
   ["eval", /\b(eval|exec)\s*\(|new Function\(/, "high", "Dynamic code evaluation.", "Remove; use a parser or dispatch table."],
   ["unsafe-deser", /(pickle\.loads?|yaml\.load\((?!.*Safe)|marshal\.loads|ObjectInputStream|unserialize\()/, "high", "Unsafe deserialization of potentially untrusted data.", "Use JSON / yaml.safe_load / signed data."],
@@ -103,16 +103,84 @@ export const RULES = [
   ["llm-prompt-concat", /(prompt|messages?)\s*[+=].*(user_input|request\.|req\.|document|retrieved|scraped)/i, "medium", "Untrusted text concatenated into an LLM prompt.", "Separate roles/delimiters, treat as data, constrain tools. See llm-app-security."],
 ];
 
-export function scan(code, filename = "") {
+const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+const TEST_PATH = /(^|[\\/])(tests?|__tests__|fixtures?|spec|e2e)[\\/]|(^|[\\/])test_[^\\/]*$|\.(test|spec)\.[a-z]+$/i;
+const PLACEHOLDER = /(test|fake|example|dummy|sample|placeholder|changeme|xxxx|your[_-]|redacted|\.\.\.)/i;
+const ESCAPER = /\b(esc|escape\w*|escapeHtml|sanitize\w*|DOMPurify|encodeHTML|textContent)\s*[(.]/;
+
+// Context-aware adjustment of a raw rule hit: returns null to suppress, or {sev, msg}.
+function adjust(id, sev, msg, line, win, filename) {
+  const inTest = TEST_PATH.test(filename);
+  if (id === "sql-concat" && (/(\?|%s|\$\d+)/.test(win) || /,\s*([(\[]|\w*params\w*)/.test(win)))
+    return { sev: "low", msg: "Dynamic SQL fragment alongside bound parameters. Confirm every interpolated part is a constant identifier, never user input." };
+  if (id === "xss-sink") {
+    const rhs = line.split(/innerHTML\s*[+]?=|dangerouslySetInnerHTML|document\.write\(|v-html|mark_safe\(/i).slice(1).join(" ");
+    if (ESCAPER.test(line)) return null;
+    if (/^\s*(['"`])(?:(?!\1)[^\\$+]|\\.)*\1\s*(?:[;)}\],]|$)/.test(rhs)) return null; // pure string literal
+    if (/^\s*[\w$.#]+\s*(?:[;)}\],]|$)/.test(rhs)) return { sev: "low", msg: "A variable is assigned to an HTML sink. Confirm it was built with escaping (esc/DOMPurify)." };
+    if (/[(+{,]\s*$/.test(rhs)) return { sev: "low", msg: "Multi-line HTML build. Confirm every interpolated value goes through esc()/DOMPurify." };
+    return { sev, msg };
+  }
+  if (id === "hardcoded-secret") {
+    if (PLACEHOLDER.test(line)) return null;
+    if (inTest) return { sev: "low", msg: msg + " (in a test file: confirm it is a fixture, not a live credential)." };
+  }
+  if (inTest && !["critical"].includes(sev) && !["aws-key", "private-key"].includes(id) && sev !== "low")
+    return { sev: "low", msg: msg + " (test file)" };
+  return { sev, msg };
+}
+
+export function scanFindings(code, filename = "") {
   const found = [];
-  code.split(/\r?\n/).forEach((line, i) => {
-    for (const [id, re, sev, msg, fix] of RULES) if (re.test(line)) found.push({ n: i + 1, sev, id, msg, fix, src: line.trim().slice(0, 120) });
+  const lines = code.split(/\r?\n/);
+  lines.forEach((line, i) => {
+    const win = lines.slice(i, i + 3).join("\n");
+    for (const [id, re, sev, msg, fix] of RULES) {
+      if (!re.test(line)) continue;
+      const adj = adjust(id, sev, msg, line, win, filename);
+      if (adj) found.push({ n: i + 1, sev: adj.sev, id, msg: adj.msg, fix, src: line.trim().slice(0, 120) });
+    }
   });
-  const order = { critical: 0, high: 1, medium: 2, low: 3 };
-  found.sort((a, b) => order[a.sev] - order[b.sev] || a.n - b.n);
+  return found.sort((a, b) => SEV_ORDER[a.sev] - SEV_ORDER[b.sev] || a.n - b.n);
+}
+
+export function scan(code, filename = "") {
+  const found = scanFindings(code, filename);
   if (!found.length) return "no pattern hits (does not mean secure). Run secure_coding_checklist and a real SAST tool (see vetted-open-source-tools).";
   return `${found.length} potential issue(s)${filename ? " in " + filename : ""}\n` +
     found.map((f) => `[${f.sev.toUpperCase()}] line ${f.n} ${f.id}: ${f.msg}\n    code: ${f.src}\n    fix: ${f.fix}`).join("\n");
+}
+
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "build", "venv", ".venv", "env", "__pycache__", "vendor", ".next", "target", "site-packages", ".tox", "coverage", "third_party", ".mypy_cache"]);
+const SCAN_EXT = new Set([".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".php", ".rb", ".go", ".java", ".cs", ".yml", ".yaml", ".sh", ".html", ".vue", ".tf"]);
+
+export function scanPath(root, { maxFiles = 3000, showSource = false } = {}) {
+  const files = [];
+  (function walk(d) {
+    let ents; try { ents = readdirSync(d); } catch { return; }
+    for (const n of ents) {
+      if (files.length >= maxFiles) return;
+      if (SKIP_DIRS.has(n) || n.startsWith(".env") || n.endsWith(".min.js")) continue;
+      const p = join(d, n);
+      let s; try { s = lstatSync(p); } catch { continue; }
+      if (s.isSymbolicLink()) continue;
+      if (s.isDirectory()) walk(p);
+      else if (SCAN_EXT.has(extname(n)) && s.size < 400_000) files.push(p);
+    }
+  })(root);
+  const all = [];
+  for (const f of files) {
+    let code; try { code = readFileSync(f, "utf8"); } catch { continue; }
+    for (const x of scanFindings(code, f)) all.push({ ...x, file: f });
+  }
+  const bySev = {}, byRule = {};
+  for (const x of all) { bySev[x.sev] = (bySev[x.sev] || 0) + 1; byRule[`${x.sev} ${x.id}`] = (byRule[`${x.sev} ${x.id}`] || 0) + 1; }
+  const shown = all.filter((x) => x.sev !== "low");
+  const head = `scanned ${files.length} files${files.length >= maxFiles ? " (limit reached)" : ""}; ${all.length} finding(s): ` +
+    (["critical", "high", "medium", "low"].filter((k) => bySev[k]).map((k) => `${bySev[k]} ${k}`).join(", ") || "none");
+  const rules = Object.entries(byRule).sort((a, b) => b[1] - a[1]).map(([k, v]) => `  ${String(v).padStart(4)}  ${k}`).join("\n");
+  const rows = shown.slice(0, 80).map((x) => `[${x.sev.toUpperCase()}] ${x.file}:${x.n} ${x.id}: ${x.msg}` + (showSource ? `\n    code: ${x.src}` : "")).join("\n");
+  return `${head}\n${rules}\n${shown.length ? "\nfindings (low severity omitted from list, counted above):\n" + rows : ""}${shown.length > 80 ? `\n... ${shown.length - 80} more` : ""}\n\nHeuristic scan: expect false positives and misses. Source lines are hidden by default so secrets never reach the transcript.`;
 }
 
 // --------------------------------------------------------- live lookups
@@ -200,6 +268,16 @@ server.registerTool("scan_code", {
   description: "Fast regex review of a snippet for common vulnerability patterns (secrets, injection, weak crypto, TLS off, XSS sinks, JWT bypass, SSRF, unsafe deserialization, unpinned CI refs). Heuristic: false positives and misses expected; complements SAST, never replaces it.",
   inputSchema: { code: z.string().max(200000), filename: z.string().optional() },
 }, async ({ code, filename }) => text(scan(code, filename)));
+
+server.registerTool("scan_path", {
+  description: "Scan a local folder with the same heuristics as scan_code. Skips vendored/build folders, .env files and symlinks. Source lines are hidden by default so secrets are never echoed. Read-only.",
+  inputSchema: { path: z.string(), max_files: z.number().int().min(1).max(20000).optional(), show_source: z.boolean().optional() },
+}, async ({ path, max_files, show_source }) => {
+  const root = resolve(path);
+  let st; try { st = statSync(root); } catch { return text(`path not found: ${root}`); }
+  if (!st.isDirectory()) return text("path must be a directory; use scan_code for a snippet");
+  return text(scanPath(root, { maxFiles: max_files, showSource: show_source }));
+});
 
 server.registerTool("threat_model", {
   description: "STRIDE-per-element worksheet plus AI-specific threats for a described feature or system.",

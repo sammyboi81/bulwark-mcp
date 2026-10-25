@@ -11,6 +11,7 @@
     "start": "node server.js",
     "test": "node test/smoke.mjs"
   },
+  "author": "ZagAIrot",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=18"

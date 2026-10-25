@@ -17,7 +17,7 @@ Free. Local. Runs on your machine. No API keys, no accounts, no LLM calls inside
 - `ai-generated-code-risks` - hallucinated packages ("slopsquatting"), insecure defaults, a review routine
 - `supply-chain-security` and `vetted-open-source-tools` - how to adopt scanners without getting burned (a popular scanner's own GitHub Action was hijacked in March 2026), plus lessons from Aikido's install-time malware blocking
 
-**11 tools**
+**12 tools**
 
 | Tool | What it does |
 |---|---|
@@ -25,6 +25,7 @@ Free. Local. Runs on your machine. No API keys, no accounts, no LLM calls inside
 | `get_skill`, `list_skills`, `search_security` | Read and search the playbooks |
 | `secure_coding_checklist` | Pre-commit checklist by language and feature (login, upload, payment, webhook...) |
 | `scan_code` | Fast pattern review: secrets, injection, weak crypto, TLS off, JWT bypass, SSRF, unpinned CI actions |
+| `scan_path` | Scan a whole folder (skips vendored dirs and .env files; never prints source lines) |
 | `threat_model` | STRIDE worksheet plus AI-specific threats |
 | `check_known_exploited` | Search CISA's Known Exploited Vulnerabilities catalog |
 | `lookup_cve` | NVD details, CVSS, weaknesses |
@@ -68,4 +69,4 @@ Skills are plain Markdown in `skills/` with a small front-matter header. Fixes a
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. Copyright 2026 ZagAIrot. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
