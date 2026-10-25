@@ -59,7 +59,7 @@ Requires Node 18+. The only network calls are read-only queries to cisa.gov, nvd
 
 Knowing the rules is half of it. Enforcing them is the other half.
 
-- **[Claude Code Seatbelt Kit - $27](https://payhip.com/b/Vwnjt)** - hooks that stop Claude Code from doing damage: it denies risky deploys, re-injects your standing rules so the agent doesn't drift, and records every decision to a record you own.
+- **[Claude Code Seatbelt Kit - $27](https://payhip.com/b/Vwnjt?utm_source=bulwark&utm_medium=readme&utm_campaign=governed&utm_content=seatbelt)** - hooks that stop Claude Code from doing damage: it denies risky deploys, re-injects your standing rules so the agent doesn't drift, and records every decision to a record you own.
 - **[ArkHive](https://github.com/sammyboi81/arkhive)** (free, Apache-2.0) - local-first, tamper-evident memory for your agents, kept on your machine.
 - **Sentarion** - the governed layer above it: a policy gate that refuses dangerous actions, adversarial multi-agent code review, signed audit manifests.
 - **InboxAxe** - your business messaging, handled. See [inboxaxe.com](https://inboxaxe.com).
@@ -77,3 +77,7 @@ Welcome to the Era of RI.
 ## License
 
 Apache-2.0. Copyright 2026 ZagAIrot. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+---
+
+**Build secure, then keep it secure.** Bulwark teaches your agent the rules. The [Claude Code Seatbelt Kit ($27)](https://payhip.com/b/Vwnjt?utm_source=bulwark&utm_medium=readme&utm_campaign=footer&utm_content=seatbelt) makes Claude Code follow them: risky deploys denied, your standing rules re-injected, every decision recorded to a record you own.

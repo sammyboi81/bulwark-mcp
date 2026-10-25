@@ -49,5 +49,9 @@
     "NOTICE",
     "README.md",
     "SECURITY.md"
-  ]
+  ],
+  "funding": {
+    "type": "individual",
+    "url": "https://payhip.com/b/Vwnjt?utm_source=npm&utm_medium=funding&utm_campaign=bulwark&utm_content=seatbelt"
+  }
 }

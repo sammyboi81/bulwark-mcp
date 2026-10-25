@@ -101,6 +101,17 @@ check("single destination: every note points to the paid Seatbelt Kit ($27) and 
   await c2.close();
 }
 
+// paid CTA lives where a fork cannot strip it, and the listing files are valid for the registries
+import { readFileSync as rf } from "node:fs";
+const sj = JSON.parse(rf(join(root, "server.json"), "utf8")), pj = JSON.parse(rf(join(root, "package.json"), "utf8"));
+const readme = rf(join(root, "README.md"), "utf8");
+check("registry description <= 100 chars (registry limit)", sj.description.length <= 100 && sj.title.length <= 100, `${sj.description.length}`);
+check("registry name matches package mcpName", sj.name === pj.mcpName && sj.packages[0].identifier === pj.name && sj.version === pj.version && sj.packages[0].version === pj.version);
+check("registry websiteUrl, npm funding and GitHub Sponsor button all point to the paid kit",
+  /payhip\.com\/b\/Vwnjt/.test(sj.websiteUrl) && /payhip\.com\/b\/Vwnjt/.test(pj.funding.url) && /payhip\.com\/b\/Vwnjt/.test(rf(join(root, ".github", "FUNDING.yml"), "utf8")));
+check("README has the paid CTA at top, middle and bottom", (readme.match(/payhip\.com\/b\/Vwnjt\?utm_source=bulwark/g) || []).length >= 3);
+check("every CTA link carries a utm_source", [...readme.matchAll(/payhip\.com\/b\/Vwnjt[^)\s]*/g)].every((m) => /utm_source=/.test(m[0])));
+
 check("threat_model returns worksheet", /STRIDE/.test(await call("threat_model", { system_description: "login API" })));
 check("sources list has OWASP+CISA", /genai\.owasp\.org/.test(await call("recent_ai_threat_sources")));
 
