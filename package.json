@@ -1,0 +1,22 @@
+{
+  "name": "secure-dev-mcp",
+  "version": "0.1.0",
+  "description": "Security best-practice skills and live vulnerability lookups for AI coding agents (MCP server).",
+  "type": "module",
+  "bin": {
+    "secure-dev-mcp": "server.js"
+  },
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.mjs"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  }
+}
