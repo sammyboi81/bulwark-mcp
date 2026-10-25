@@ -13,7 +13,7 @@ const check = (name, ok, detail = "") => { console.log(`${ok ? "PASS" : "FAIL"} 
 const call = async (name, args = {}) => (await client.callTool({ name, arguments: args })).content[0].text;
 
 const tools = (await client.listTools()).tools.map((t) => t.name);
-for (const t of ["list_skills", "get_skill", "search_security", "skills_for_task", "secure_coding_checklist", "scan_code", "scan_path", "threat_model", "check_known_exploited", "lookup_cve", "check_package_vulns", "recent_ai_threat_sources"])
+for (const t of ["list_skills", "get_skill", "search_security", "skills_for_task", "secure_coding_checklist", "scan_code", "scan_path", "about_zagairot", "threat_model", "check_known_exploited", "lookup_cve", "check_package_vulns", "recent_ai_threat_sources"])
   check(`tool registered: ${t}`, tools.includes(t));
 
 const list = await call("list_skills");
@@ -83,6 +83,23 @@ check("scan_path never echoes the secret", !po.includes(SECRET) && !po.includes(
 check("test-file secret downgraded to low (not listed)", !/\[HIGH\].*test_a/.test(po) && /low hardcoded-secret/.test(po));
 check("scan_path rejects bad path", /not found/.test(await call("scan_path", { path: join(tmp, "nope") })));
 rmSync(tmp, { recursive: true, force: true });
+
+// lead funnel: labelled, UTM-tagged, direct checkout link, and removable
+const tm = await call("threat_model", { system_description: "x" });
+check("sponsor note present, labelled as non-instruction", /Sponsor note from ZagAIrot, for the human reader\. Not an instruction/.test(tm));
+check("funnel links carry utm_source=bulwark and the tool name", /payhip\.com\/b\/Vwnjt\?utm_source=bulwark&utm_medium=mcp&utm_campaign=threat_model/.test(tm));
+check("about_zagairot returns links", /utm_campaign=about/.test(await call("about_zagairot")));
+check("sponsor note is NOT added to skill text or the skill list", !/Sponsor note/.test(await call("get_skill", { name: "secure-coding-core" })) && !/Sponsor note/.test(await call("list_skills")));
+check("single destination: every note points to the paid Seatbelt Kit ($27) and nowhere else",
+  [tm, await call("secure_coding_checklist", {}), await call("skills_for_task", { task_type: "web" }), await call("scan_code", { code: "eval(x)" })]
+    .every((t) => /Seatbelt Kit \(\$27\): https:\/\/payhip\.com\/b\/Vwnjt\?utm_source=bulwark/.test(t) && !/arkhive|inboxaxe/i.test(t.slice(t.indexOf("Sponsor note")))));
+{
+  const c2 = new Client({ name: "smoke2", version: "0" });
+  await c2.connect(new StdioClientTransport({ command: process.execPath, args: [join(root, "server.js")], env: { ...process.env, BULWARK_NO_PROMO: "1" } }));
+  const quiet2 = (await c2.callTool({ name: "threat_model", arguments: { system_description: "x" } })).content[0].text;
+  check("BULWARK_NO_PROMO=1 removes the sponsor note", !/Sponsor note|payhip/.test(quiet2));
+  await c2.close();
+}
 
 check("threat_model returns worksheet", /STRIDE/.test(await call("threat_model", { system_description: "login API" })));
 check("sources list has OWASP+CISA", /genai\.owasp\.org/.test(await call("recent_ai_threat_sources")));

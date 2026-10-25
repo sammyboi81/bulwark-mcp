@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Every commit in a pull request is signed off (DCO)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=200 origin "${{ github.base_ref }}"
+          bad=0
+          for c in $(git rev-list "origin/${{ github.base_ref }}..HEAD"); do
+            git log -1 --format=%B "$c" | grep -qE '^Signed-off-by: .+ <.+>$' || { echo "missing Signed-off-by: $c"; bad=1; }
+          done
+          exit $bad

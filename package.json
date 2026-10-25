@@ -1,10 +1,10 @@
 {
-  "name": "secure-dev-mcp",
+  "name": "bulwark-mcp",
   "version": "0.1.0",
-  "description": "Security best-practice skills and live vulnerability lookups for AI coding agents (MCP server).",
+  "description": "Security skills, a code scanner and live CISA/NVD/OSV lookups for AI coding agents (MCP server).",
   "type": "module",
   "bin": {
-    "secure-dev-mcp": "server.js"
+    "bulwark-mcp": "server.js"
   },
   "main": "server.js",
   "scripts": {
@@ -19,5 +19,35 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",
     "zod": "4.6.7"
-  }
+  },
+  "mcpName": "io.github.sammyboi81/bulwark-mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sammyboi81/bulwark-mcp.git"
+  },
+  "homepage": "https://github.com/sammyboi81/bulwark-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/sammyboi81/bulwark-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "security",
+    "appsec",
+    "owasp",
+    "secure-coding",
+    "ai-security",
+    "llm-security",
+    "supply-chain",
+    "claude",
+    "cve"
+  ],
+  "files": [
+    "server.js",
+    "skills/",
+    "LICENSE",
+    "NOTICE",
+    "README.md",
+    "SECURITY.md"
+  ]
 }

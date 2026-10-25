@@ -1,10 +1,12 @@
-# Bulwark (working name) - security skills and live threat lookups for your AI coding agent
+# ZagAIrot Bulwark - security skills and live threat lookups for your AI coding agent
 
 Your agent writes secure code on the first pass instead of the third. Bulwark gives Claude Code, Codex, Cursor or any MCP client a security playbook it can pull on demand, a code scanner it can run on its own output, and live lookups against CISA, NVD and OSV so it checks facts instead of guessing.
 
 Free. Local. Runs on your machine. No API keys, no accounts, no LLM calls inside the server.
 
-> Status: pre-release, private repo. Working name; the final name is the founder's call.
+> **Advice is half of it. Enforcement is the other half.** Bulwark tells your agent what secure looks like. The **[Claude Code Seatbelt Kit ($27)](https://payhip.com/b/Vwnjt?utm_source=bulwark&utm_medium=readme&utm_campaign=top&utm_content=seatbelt)** makes Claude Code follow your rules: it denies risky deploys, re-injects your standing rules so the agent doesn't drift, and records every decision to a record you own.
+
+> Status: pre-release.
 
 ## What your agent gets
 
@@ -17,7 +19,7 @@ Free. Local. Runs on your machine. No API keys, no accounts, no LLM calls inside
 - `ai-generated-code-risks` - hallucinated packages ("slopsquatting"), insecure defaults, a review routine
 - `supply-chain-security` and `vetted-open-source-tools` - how to adopt scanners without getting burned (a popular scanner's own GitHub Action was hijacked in March 2026), plus lessons from Aikido's install-time malware blocking
 
-**12 tools**
+**13 tools**
 
 | Tool | What it does |
 |---|---|
@@ -26,6 +28,7 @@ Free. Local. Runs on your machine. No API keys, no accounts, no LLM calls inside
 | `secure_coding_checklist` | Pre-commit checklist by language and feature (login, upload, payment, webhook...) |
 | `scan_code` | Fast pattern review: secrets, injection, weak crypto, TLS off, JWT bypass, SSRF, unpinned CI actions |
 | `scan_path` | Scan a whole folder (skips vendored dirs and .env files; never prints source lines) |
+| `about_zagairot` | Who makes Bulwark, with links to ZagAIrot products |
 | `threat_model` | STRIDE worksheet plus AI-specific threats |
 | `check_known_exploited` | Search CISA's Known Exploited Vulnerabilities catalog |
 | `lookup_cve` | NVD details, CVSS, weaknesses |
@@ -37,9 +40,9 @@ There is also a `secure_build` prompt and every skill is exposed as a `skill://`
 ## Install
 
 ```bash
-git clone <repo-url> && cd secure-dev-mcp
+git clone https://github.com/sammyboi81/bulwark-mcp && cd bulwark-mcp
 npm ci
-claude mcp add secure-dev -- node /absolute/path/to/secure-dev-mcp/server.js
+claude mcp add bulwark -- node /absolute/path/to/bulwark-mcp/server.js
 npm test        # exercises every tool end to end
 ```
 
@@ -63,9 +66,13 @@ Knowing the rules is half of it. Enforcing them is the other half.
 
 Welcome to the Era of RI.
 
-## Contributing and reporting
+## Contributing, rights and security
 
-Skills are plain Markdown in `skills/` with a small front-matter header. Fixes and additions welcome; cite a primary source for any new claim. Security issues in this project: open a private advisory on the repository.
+- **Contribute:** see [CONTRIBUTING.md](CONTRIBUTING.md). Pull requests only, every commit signed off (`git commit -s`), owners per file in [CODEOWNERS](.github/CODEOWNERS). Contributors keep their copyright and grant ZagAIrot the right to relicense.
+- **Rights:** Apache-2.0, copyright ZagAIrot. You may use and fork it commercially if you keep [LICENSE](LICENSE) and [NOTICE](NOTICE). Names and logos are not licensed: see [TRADEMARK.md](TRADEMARK.md).
+- **Security issues:** see [SECURITY.md](SECURITY.md); use GitHub's private vulnerability reporting.
+- **Sponsor notes:** a few tools append one short, labelled line pointing to ZagAIrot's Seatbelt Kit. It is plain text for the human reader, never an instruction. Remove it with `BULWARK_NO_PROMO=1`.
+- **No tracking inside the tool:** Bulwark sends nothing about you or your code anywhere. Visits to our site are counted through the tagged links above, only if someone clicks.
 
 ## License
 

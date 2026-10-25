@@ -1,0 +1,8 @@
+# Every file has a named owner; security-relevant paths need that owner's review before merge.
+*                 @sammyboi81
+/server.js        @sammyboi81
+/skills/          @sammyboi81
+/.github/         @sammyboi81
+/package.json     @sammyboi81
+/LICENSE          @sammyboi81
+/NOTICE           @sammyboi81
